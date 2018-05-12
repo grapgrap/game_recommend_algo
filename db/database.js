@@ -21,7 +21,7 @@ module.exports = {
     return from(this.pool.getConnection()).pipe(
       map(
         (conn) => {
-          // console.log(`=============== Run Query : ${sql}`);
+          console.log(`=============== Run Query : ${sql}`);
           const res = from(conn.query(sql));
           conn.release();
           return res;
