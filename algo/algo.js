@@ -251,7 +251,8 @@ router.get('/predict-score-test', (req, res, next) => {
   const result = test.pipe(
     count(),
     zip(success),
-    map(zip => zip[1] / zip[0])
+    map(zip => zip[1] / zip[0]),
+    tap(console.log)
   );
 
   result.subscribe(
