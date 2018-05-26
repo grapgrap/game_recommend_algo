@@ -1,20 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const database = require('../db/database');
-const mysql = require('mysql2');
 const moment = require('moment');
+const mysql = require('mysql2');
 const { from, of } = require('rxjs');
 const { mergeMap, map, shareReplay, tap, reduce, filter, concat, groupBy, count, toArray, zip, take } = require('rxjs/operators');
 
-function collaborateFilter(gameId, targetUserId) {
+function collaborateFilter(targetUserId, gameId) {
   const CAN_NOT_COMPUTE = -999; // 예상 점수를 계산 할 수 없을 때 출력할 값
 
   // 타겟 유저의 게임 평가 리스트
   const targetUserRates = from(database.query(`SELECT * FROM game_rate WHERE user_id = ${targetUserId}`)).pipe(
-    mergeMap(res => res),
-    map(res => res[0]),
     mergeMap(targetUserRates => from(targetUserRates)),
-    shareReplay(),
+    shareReplay()
   );
 
   // N개 이상 겹치는 게임을 평가한 이웃 리스트
@@ -31,21 +29,23 @@ function collaborateFilter(gameId, targetUserId) {
     WHERE candidate.user_id in (SELECT user_id FROM game_rate WHERE game_id = ${gameId})
     LIMIT 20`)
   ).pipe(
-    mergeMap(res => res),
-    map(res => res[0]),
     mergeMap(neighborhoods => from(neighborhoods)),
     shareReplay()
   );
 
-  const targetGameRateCount = targetUserRates.pipe(count());
-  const neighborhoodCount = neighborhoods.pipe(count());
+  const targetGameRateCount = targetUserRates.pipe(
+    count(),
+    shareReplay()
+  );
+  const neighborhoodCount = neighborhoods.pipe(
+    count(),
+    shareReplay()
+  );
 
   const neighborhoodGames = neighborhoods.pipe(
     map(neighborhoods => neighborhoods.user_id),
     reduce((prev, next, index) => index === 0 ? prev + `user_id = ${next}` : prev + ` OR user_id = ${next}`, `SELECT DISTINCT game_id FROM game_rate WHERE `),
     mergeMap(query => from(database.query(query))),
-    mergeMap(res => res),
-    map(res => res[0]),
     mergeMap(neiberhoohGames => from(neiberhoohGames)),
     shareReplay()
   );
@@ -54,24 +54,22 @@ function collaborateFilter(gameId, targetUserId) {
     map(neiberhoohGame => neiberhoohGame.game_id),
     reduce((prev, next, index) => index === 0 ? prev + `game_id = ${next}` : prev + ` OR game_id = ${next}`, `SELECT * FROM game_rate WHERE `),
     mergeMap(query => from(database.query(query))),
-    mergeMap(res => res),
-    map(res => res[0]),
     mergeMap(neighborhoodsGameRates => from(neighborhoodsGameRates)),
     shareReplay()
   );
 
-  const NUMBER_OF_NEIGHBORHOOD_GAME_RATE = 20;
+  const NUMBER_OF_NEIGHBORHOOD_GAME_RATE = 30;
   const splitedNeighborhoodsByUserId = neighborhoods.pipe(
     map(neighborhood => neighborhoodsGameRates.pipe(
       filter(gameRate => gameRate.user_id === neighborhood.user_id),
-      // take(NUMBER_OF_NEIGHBORHOOD_GAME_RATE),
+      take(NUMBER_OF_NEIGHBORHOOD_GAME_RATE),
     )),
     shareReplay()
   );
 
   const neighborhoodsSimilar = splitedNeighborhoodsByUserId.pipe(
     mergeMap(neighborhoodGameRates => sim(targetUserRates, neighborhoodGameRates)),
-    shareReplay()
+    shareReplay(),
   );
 
   const Rl = splitedNeighborhoodsByUserId.pipe(
@@ -81,8 +79,7 @@ function collaborateFilter(gameId, targetUserId) {
         concat(neighborhoodGameRates.pipe(count())),
         reduce((total, count) => total.rate / count),
       )
-    ),
-    shareReplay(),
+    )
   );
 
   // Rli - Rl
@@ -93,7 +90,7 @@ function collaborateFilter(gameId, targetUserId) {
         zip(Rl),
         map(zip => zip[0].rate - zip[1]),
       )
-    ),
+    )
   );
 
   //
@@ -101,19 +98,17 @@ function collaborateFilter(gameId, targetUserId) {
     zip(neighborhoodsSimilar),
     map(zip => zip[0] * zip[1]),
     reduce((prev, next) => prev + next),
-    shareReplay()
   );
 
   const d = neighborhoodsSimilar.pipe(
     map(similar => similar > 0 ? similar : similar * -1),
-    reduce((prev, next) => prev + next),
-    shareReplay()
+    reduce((prev, next) => prev + next)
   );
 
   const Rk = targetUserRates.pipe(
     reduce((prev, next) => ({ ...prev, rate: prev.rate + next.rate })),
     concat(targetUserRates.pipe(count())),
-    reduce((total, count) => total.rate / count)
+    reduce((total, count) => total.rate / count),
   );
 
   const collabo = Rk.pipe(
@@ -146,10 +141,8 @@ function sim(targetUserRates, neighborhoodGameRates) {
     map(commonGame => commonGame.game_id),
     reduce((prev, next, index) => index === 0 ? prev + `game_id = ${next}` : prev + ` OR game_id = ${next}`, `SELECT * FROM game_rate WHERE `),
     mergeMap(query => from(database.query(query))),
-    mergeMap(res => res),
-    map(res => res[0]),
-    mergeMap(commonGameRates => from(commonGameRates)),
-    shareReplay()
+    shareReplay(),
+    mergeMap(commonGameRates => from(commonGameRates))
   );
 
   const Ki = commonGames.pipe(
@@ -193,73 +186,81 @@ function sim(targetUserRates, neighborhoodGameRates) {
   // sig(  (ki - ri) * (li - ri) );
   const m = Ki_Ri.pipe(zip(Li_Ri),
     map(zip => zip[0].rate * zip[1].rate),
-    reduce((prev, next) => prev + next, 0),
-    shareReplay()
+    reduce((prev, next) => prev + next, 0)
   );
 
   // sqrt( sig( (ki - ri)^2 ) )
   const d1 = Ki_Ri.pipe(
     map(item => item.rate * item.rate),
     reduce((prev, next) => prev + next, 0),
-    map(rate => Math.sqrt(rate)),
-    shareReplay()
+    map(rate => Math.sqrt(rate))
   );
 
   // sqrt( sig( (li - ri)^2 ) )
   const d2 = Li_Ri.pipe(
     map(item => item.rate * item.rate),
     reduce((prev, next) => prev + next, 0),
-    map(rate => Math.sqrt(rate)),
-    shareReplay()
+    map(rate => Math.sqrt(rate))
   );
 
   // m / (sqrt(d1) * sqrt(d2));
   return m.pipe(
     zip(d1, d2),
-    map(zip => zip[0] / zip[1] / zip[2]),
-    shareReplay()
+    map(zip => zip[0] / zip[1] / zip[2])
   );
 }
 
 router.get('/predict-score', (req, res, next) => {
-  collaborateFilter(192, 354).subscribe(result => res.json({ result: result }));
+  const user_id = +req.query.user_id;
+  const game_id = +req.query.game_id;
+  const now = moment();
+  const MUST_UPDATE_INTERVAL_DAYS = 30;
+  const q = `
+    SELECT predicted_rate 
+      FROM predicted_rate 
+      WHERE 
+        user_id = ${user_id} 
+        AND game_id = ${game_id} 
+        AND regi_date >= ${ now.subtract(MUST_UPDATE_INTERVAL_DAYS, 'days').format('YYYY-MM-DD') }
+  `;
+  database.query(q).pipe(
+    // tap(console.log)
+  ).subscribe(rows => {
+    // 예상 평점을 계산한지 3일이 지나지 않았고, 그 값이 유효한 값이면 캐시된 데이터 전송
+    if (rows.length !== 0 && false) {
+      res.json({ result: 'success', data: rows[0].predicted_rate });
+    } else {
+      let sub = collaborateFilter(user_id, game_id).subscribe(result => {
+        let q = `
+          INSERT INTO predicted_rate (
+            game_id, 
+            user_id, 
+            predicted_rate, 
+            regi_date
+          ) 
+            VALUES (
+              ${mysql.escape(game_id)}, 
+              ${mysql.escape(user_id)}, 
+              ${mysql.escape(result)}, 
+              ${mysql.escape(now.format('YYYY-MM-DD'))}
+            )`;
+        database.query(q).subscribe(res => console.log(res), err => console.log('occur error in enroll /predict-score || ' + err.toString()));
+        res.json({ result: 'success', data: result });
+      });
+
+      req.connection.on('close', () => {
+        sub.unsubscribe();
+        console.log('closed', sub.closed);
+      });
+    }
+  });
 });
 
-router.get('/predict-score-test', (req, res, next) => {
-  const targetUserId = 354;
-  const targetUserRates = from(database.query(`SELECT * FROM game_rate WHERE user_id = ${targetUserId}`)).pipe(
-    mergeMap(res => res),
-    map(res => res[0]),
-    mergeMap(targetUserRates => from(targetUserRates)),
-    shareReplay(),
-  );
-
-  const test = targetUserRates.pipe(
-    mergeMap(gameRate => collaborateFilter(gameRate.game_id, targetUserId).pipe(
-      map(predict => {
-        console.log({ real: gameRate.rate, predict: predict, isCorrect: Math.abs(gameRate.rate - predict) });
-        return { real: gameRate.rate, predict: predict, isCorrect: Math.abs(gameRate.rate - predict) >= 0.5 }
-      }),
-    )),
-  );
-
-  const success = test.pipe(
-    filter(result => result.isCorrect),
-    count()
-  );
-
-  const result = test.pipe(
-    count(),
-    zip(success),
-    map(zip => zip[1] / zip[0]),
-    tap(console.log)
-  );
-
-  result.subscribe(
-    () => {},
-    () => {},
-    () => {console.log('THIS TEST END')}
-  );
+router.get('/recommand', (req, res, next) => {
+  const ratedTags = from(database.query(`
+    SELECT game_rate.rate, game_tag.tag_id
+  
+  `));
 });
 
 module.exports = router;
