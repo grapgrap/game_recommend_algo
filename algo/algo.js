@@ -4,7 +4,7 @@ const database = require('../db/database');
 const moment = require('moment');
 const mysql = require('mysql2');
 const { from, of } = require('rxjs');
-const { mergeMap, map, shareReplay, tap, reduce, filter, concat, groupBy, count, toArray, zip, take } = require('rxjs/operators');
+const { mergeMap, map, shareReplay, tap, reduce, filter, concat, groupBy, count, toArray, zip, take, distinct } = require('rxjs/operators');
 
 function collaborateFilter(targetUserId, gameId) {
   const CAN_NOT_COMPUTE = -999; // 예상 점수를 계산 할 수 없을 때 출력할 값
@@ -219,13 +219,11 @@ router.get('/predict-score', (req, res, next) => {
     SELECT predicted_rate 
       FROM predicted_rate 
       WHERE 
-        user_id = ${user_id} 
-        AND game_id = ${game_id} 
-        AND regi_date >= ${ now.subtract(MUST_UPDATE_INTERVAL_DAYS, 'days').format('YYYY-MM-DD') }
+        user_id = ${ mysql.escape(user_id) } 
+        AND game_id = ${ mysql.escape(game_id) } 
+        AND regi_date >= ${ mysql.escape(now.subtract(MUST_UPDATE_INTERVAL_DAYS, 'days').format('YYYY-MM-DD')) }
   `;
-  database.query(q).pipe(
-    // tap(console.log)
-  ).subscribe(rows => {
+  database.query(q).subscribe(rows => {
     // 예상 평점을 계산한지 3일이 지나지 않았고, 그 값이 유효한 값이면 캐시된 데이터 전송
     if (rows.length !== 0 && false) {
       res.json({ result: 'success', data: rows[0].predicted_rate });
@@ -256,11 +254,78 @@ router.get('/predict-score', (req, res, next) => {
   });
 });
 
+function naiveBayesion(ratedTags) {
+  const tags = ratedTags.pipe(distinct(tag => tag.tag_id), shareReplay());
+  const resultByRates = tags.pipe(
+    mergeMap(tag => {
+      const targetRatedTags = ratedTags.pipe(filter(ratedTag => ratedTag.tag_id === tag.tag_id), shareReplay());
+      return from([1, 2, 3, 4, 5]).pipe(
+        mergeMap(rate => {
+          const filteredTargetRateTagCountByRate = targetRatedTags.pipe(filter(ratedTag => ratedTag.rate === rate), count(), shareReplay());
+          const targetRatedTagCount = targetRatedTags.pipe(count());
+          return filteredTargetRateTagCountByRate.pipe(zip(targetRatedTagCount), map(zip => zip[0] / zip[1]));
+        }),
+        toArray()
+      )
+    }),
+  );
+
+  return tags.pipe(
+    zip(resultByRates),
+    map(zip => {
+      const tag = zip[0];
+      const result = zip[1];
+      return {
+        id: tag.tag_id,
+        prediction: 1 * result[0] + 2 * result[1] + 3 * result[2] + 4 * result[3] + 5 * result[4]
+      };
+    }),
+    toArray(),
+    map(results => results.sort((prev, next) => next.prediction - prev.prediction)),
+    mergeMap(results => from(results)),
+    filter(result => result.prediction > 3),
+    toArray(),
+    shareReplay()
+  );
+}
+
 router.get('/recommand', (req, res, next) => {
+  const user_id = req.query.user_id;
+
   const ratedTags = from(database.query(`
     SELECT game_rate.rate, game_tag.tag_id
-  
-  `));
+      FROM game_rate, game_tag
+      WHERE 
+        user_id = ${user_id}
+        AND game_rate.game_id = game_tag.game_id
+  `)).pipe(
+    mergeMap(list => from(list)),
+    shareReplay()
+  );
+
+  const result = ratedTags.pipe(
+    count(),
+    mergeMap(length => length <= 0 ? of([]) : naiveBayesion(ratedTags)),
+    mergeMap(list => list.length <= 0 ? of(null)
+      : from(list).pipe(
+        map(tag => tag.id),
+        reduce((prev, next, index) => index === 0 ? prev + `tag_id = ${mysql.escape(next)}` : prev + ` OR tag_id = ${mysql.escape(next)}`, `SELECT * FROM game_tag WHERE `),
+        map(subQuery => `
+            SELECT game_rate.game_id, game.title, game.url, game_tag.tag_id FROM
+              (SELECT game_id, AVG(rate) as rate FROM game_rate WHERE user_id != ${user_id} GROUP BY game_id HAVING COUNT(rate) > 10) as game_rate,
+              (${subQuery} GROUP BY game_id ORDER BY null) as game_tag,
+              game
+              WHERE game_rate.game_id = game_tag.game_id AND game_rate.game_id = game.id
+              AND game_rate.rate > 3
+              ORDER BY game_rate.rate DESC
+          `),
+        tap(console.log),
+        mergeMap(query => from(database.query(query))),
+      )
+    )
+  );
+
+  result.subscribe(data => res.json({ recommend: data }));
 });
 
 module.exports = router;
