@@ -284,6 +284,7 @@ function naiveBayesion(ratedTags) {
     map(results => results.sort((prev, next) => next.prediction - prev.prediction)),
     mergeMap(results => from(results)),
     filter(result => result.prediction > 3),
+    take(10),
     toArray(),
     shareReplay()
   );
@@ -319,7 +320,6 @@ router.get('/recommand', (req, res, next) => {
               AND game_rate.rate > 3
               ORDER BY game_rate.rate DESC
           `),
-        tap(console.log),
         mergeMap(query => from(database.query(query))),
       )
     )
