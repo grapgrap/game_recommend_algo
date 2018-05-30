@@ -312,7 +312,7 @@ router.get('/recommand', (req, res, next) => {
         map(tag => tag.id),
         reduce((prev, next, index) => index === 0 ? prev + `tag_id = ${mysql.escape(next)}` : prev + ` OR tag_id = ${mysql.escape(next)}`, `SELECT * FROM game_tag WHERE `),
         map(subQuery => `
-            SELECT game_rate.game_id, game.title, game.url, game_tag.tag_id FROM
+            SELECT game_rate.game_id as id, game.title, game.url, game_tag.tag_id FROM
               (SELECT game_id, AVG(rate) as rate FROM game_rate WHERE user_id != ${user_id} GROUP BY game_id HAVING COUNT(rate) > 10) as game_rate,
               (${subQuery} GROUP BY game_id ORDER BY null) as game_tag,
               game
