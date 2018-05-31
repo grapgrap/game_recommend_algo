@@ -318,7 +318,7 @@ router.get('/recommand', (req, res, next) => {
               game
               WHERE game_rate.game_id = game_tag.game_id AND game_rate.game_id = game.id
               AND game_rate.rate > 3
-              ORDER BY game_rate.release_date DESC
+              ORDER BY game.release_date DESC
           `),
         mergeMap(query => from(database.query(query))),
       )
