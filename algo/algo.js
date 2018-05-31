@@ -225,7 +225,7 @@ router.get('/predict-score', (req, res, next) => {
   `;
   database.query(q).subscribe(rows => {
     // 예상 평점을 계산한지 3일이 지나지 않았고, 그 값이 유효한 값이면 캐시된 데이터 전송
-    if (rows.length !== 0 && false) {
+    if (rows.length !== 0) {
       res.json({ result: 'success', data: rows[0].predicted_rate });
     } else {
       let sub = collaborateFilter(user_id, game_id).subscribe(result => {
@@ -318,7 +318,7 @@ router.get('/recommand', (req, res, next) => {
               game
               WHERE game_rate.game_id = game_tag.game_id AND game_rate.game_id = game.id
               AND game_rate.rate > 3
-              ORDER BY game_rate.rate DESC
+              ORDER BY game_rate.release_date DESC
           `),
         mergeMap(query => from(database.query(query))),
       )
