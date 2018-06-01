@@ -310,14 +310,21 @@ router.get('/recommand', (req, res, next) => {
     mergeMap(list => list.length <= 0 ? of(null)
       : from(list).pipe(
         map(tag => tag.id),
-        reduce((prev, next, index) => index === 0 ? prev + `tag_id = ${mysql.escape(next)}` : prev + ` OR tag_id = ${mysql.escape(next)}`, `SELECT * FROM game_tag WHERE `),
+        reduce((prev, next, index) => index === 0 ? prev + `tag_id = ${mysql.escape(next)}` : prev + ` OR tag_id = ${mysql.escape(next)}`, `SELECT game_tag.game_id, game_tag.tag_id FROM game_tag WHERE `),
         map(subQuery => `
-            SELECT game_rate.game_id as id, game.title, game.url, game_tag.tag_id FROM
-              (SELECT game_id, AVG(rate) as rate FROM game_rate WHERE user_id != ${user_id} GROUP BY game_id HAVING COUNT(rate) > 10) as game_rate,
-              (${subQuery} GROUP BY game_id ORDER BY null) as game_tag,
+            SELECT game.id as id, game.title, game.url FROM
+              (
+                SELECT DISTINCT game_rate.game_id as game_id FROM
+                  (
+                    SELECT game_rate.game_id FROM game_rate 
+                      WHERE user_id != ${user_id} GROUP BY game_id HAVING COUNT(rate) > 10 AND AVG(rate) > 3
+                  ) as game_rate
+                  INNER JOIN
+                  (${subQuery}) as game_tag
+                ON game_rate.game_id = game_tag.game_id
+              ) as filtered_game,
               game
-              WHERE game_rate.game_id = game_tag.game_id AND game_rate.game_id = game.id AND game_tag.game_id = game.id
-              AND game_rate.rate > 3
+              WHERE game.id = filtered_game.game_id
               ORDER BY game.release_date DESC
           `),
         tap(console.log),
