@@ -316,10 +316,11 @@ router.get('/recommand', (req, res, next) => {
               (SELECT game_id, AVG(rate) as rate FROM game_rate WHERE user_id != ${user_id} GROUP BY game_id HAVING COUNT(rate) > 10) as game_rate,
               (${subQuery} GROUP BY game_id ORDER BY null) as game_tag,
               game
-              WHERE game_rate.game_id = game_tag.game_id AND game_rate.game_id = game.id
+              WHERE game_rate.game_id = game_tag.game_id AND game_rate.game_id = game.id AND game_tag.game_id = game.id
               AND game_rate.rate > 3
               ORDER BY game.release_date DESC
           `),
+        tap(console.log),
         mergeMap(query => from(database.query(query))),
       )
     )
