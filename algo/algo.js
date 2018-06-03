@@ -258,7 +258,7 @@ router.get('/predict-test', (req, res, next) => {
   const user_id = 354;
   const game_id = +req.query.game_id;
   collaborateFilter(user_id, game_id).subscribe(result => {
-    res.json({result: 'success', data: result});
+    res.json({ result: 'success', data: result });
   })
 });
 
@@ -335,7 +335,6 @@ router.get('/recommand', (req, res, next) => {
               WHERE game.id = filtered_game.game_id
               ORDER BY game.release_date DESC
           `),
-        tap(console.log),
         mergeMap(query => from(database.query(query))),
       )
     )
