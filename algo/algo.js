@@ -254,6 +254,14 @@ router.get('/predict-score', (req, res, next) => {
   });
 });
 
+router.get('/predict-test', (req, res, next) => {
+  const user_id = 354;
+  const game_id = +req.query.game_id;
+  collaborateFilter(user_id, game_id).subscribe(result => {
+    res.json({result: 'success', data: result});
+  })
+});
+
 function naiveBayesion(ratedTags) {
   const tags = ratedTags.pipe(distinct(tag => tag.tag_id), shareReplay());
   const resultByRates = tags.pipe(
