@@ -16,7 +16,7 @@ function collaborateFilter(targetUserId, gameId) {
   );
 
   // N개 이상 겹치는 게임을 평가한 이웃 리스트
-  const NUMBER_OF_MATCHED_GAME = 2;
+  const NUMBER_OF_MATCHED_GAME = 5;
   const neighborhoods = from(database.query(`
     SELECT candidate.user_id AS user_id FROM (
       SELECT game_rate.user_id
@@ -58,7 +58,7 @@ function collaborateFilter(targetUserId, gameId) {
     shareReplay()
   );
 
-  const NUMBER_OF_NEIGHBORHOOD_GAME_RATE = 30;
+  const NUMBER_OF_NEIGHBORHOOD_GAME_RATE = 50;
   const splitedNeighborhoodsByUserId = neighborhoods.pipe(
     map(neighborhood => neighborhoodsGameRates.pipe(
       filter(gameRate => gameRate.user_id === neighborhood.user_id),
@@ -225,7 +225,7 @@ router.get('/predict-score', (req, res, next) => {
   `;
   database.query(q).subscribe(rows => {
     // 예상 평점을 계산한지 3일이 지나지 않았고, 그 값이 유효한 값이면 캐시된 데이터 전송
-    if (rows.length !== 0) {
+    if (rows.length !== 0 && false) {
       res.json({ result: 'success', data: rows[0].predicted_rate });
     } else {
       let sub = collaborateFilter(user_id, game_id).subscribe(result => {

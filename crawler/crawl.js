@@ -279,4 +279,74 @@ router.get('/ratings/user', (req, res, next) => {
     });
 });
 
+router.get('/ratings/critic', (req, res, next) => {
+  const baseFront = `http://www.metacritic.com/game/pc/`;
+  const baseBack = `/critic-reviews`;
+  const q = `SELECT * FROM game`;
+  from(database.query(q))
+    .pipe(
+      mergeMap(list =>
+        interval(3000).pipe(
+          take(list.length - 3622),
+          map(i => list[i + 3622])
+        )
+      ),
+      map(item => ({
+        ...item,
+        url: baseFront + item.url + baseBack
+      })),
+      mergeMap(item => {
+        const option = {
+          method: 'GET',
+          uri: item.url,
+          headers: { 'USER-Agent': 'Mozilla/5.0' },
+          transform: body => cheerio.load(body)
+        };
+        return from(request(option)).pipe(
+          tap(() => console.log(`============================= START TITLE: ${item.title} // ID: ${item.id} ==============================`)),
+          map($ => $, err => console.log(err)),
+          mergeMap($ => {
+            const datas = $('.critic_reviews .review_section .review_stats').map((i, elem) => {
+              const name = $(elem).children('.review_critic').children('.source').children('a').text() || '';
+              const unFormattedDate = $(elem).children('.review_critic').children('.date').text();
+              let date;
+              if (unFormattedDate !== '') {
+                date = moment(unFormattedDate, 'MMM D, YYYY').format('YYYY-MM-DD');
+              } else {
+                date = unFormattedDate;
+              }
+              const rate = +$(elem).children('.review_grade').children('.game').text() || 0;
+              return {name: name, date: date, rate: Math.round(rate / 10) / 2};
+            }).toArray();
+            return interval(5).pipe(
+              take(datas.length),
+              map(i => datas[i]),
+              mergeMap(data => {
+                const q = `INSERT INTO user (email, nickname, is_metacritic) SELECT ${mysql.escape(data.name)}, ${mysql.escape(data.name)}, ${mysql.escape(1)} FROM DUAL WHERE NOT EXISTS (SELECT email FROM user WHERE email = ${mysql.escape(data.name)});
+                         SELECT * FROM user WHERE email = ${mysql.escape(data.name)};`;
+                return from(database.query(q)).pipe(
+                  map(res => res[1][0]),
+                  mergeMap(row => {
+                    const q = `INSERT INTO game_rate (game_id, user_id, rate, regi_date)
+                    VALUE (${mysql.escape(item.id)}, ${mysql.escape(row.id)}, ${mysql.escape(data.rate)}, ${mysql.escape(data.date)})
+                    ON DUPLICATE KEY UPDATE game_id = ${mysql.escape(item.id)}, user_id = ${mysql.escape(row.id)}`;
+                    return from(database.query(q));
+                  })
+                );
+              })
+            );
+          })
+        );
+      })
+    )
+    .subscribe(() => {}, (err) => {
+      console.log(err);
+      console.log("\007");
+      console.log("\007");
+      console.log("\007");
+      console.log("\007");
+      console.log("\007");
+    });
+});
+
 module.exports = router;
