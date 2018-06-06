@@ -336,14 +336,14 @@ router.get('/recommand', (req, res, next) => {
           `
   SELECT game.id as id, game.title, game.url FROM
   (
-  SELECT DISTINCT game_rate.game_id as game_id FROM
-  (
-  SELECT game_rate.game_id FROM game_rate
-  WHERE user_id != ${user_id} GROUP BY game_id HAVING COUNT(rate) > 10 AND AVG(rate) > 3
-  ) as game_rate
-  INNER JOIN
-  (${subQuery}) as game_tag
-  ON game_rate.game_id = game_tag.game_id
+    SELECT DISTINCT game_rate.game_id as game_id FROM
+    (
+      SELECT game_rate.game_id FROM game_rate
+      WHERE user_id != ${user_id} GROUP BY game_id HAVING COUNT(rate) > 50 AND AVG(rate) > 3
+    ) as game_rate
+    INNER JOIN
+    (${subQuery}) as game_tag
+    ON game_rate.game_id = game_tag.game_id
   ) as filtered_game,
   game
   WHERE game.id = filtered_game.game_id
