@@ -16,7 +16,7 @@ mysql.init();
 
 app.use(bodyParser.json());
 
-app.set('port', 9989);
+app.set('port', 9988);
 app.listen(app.get('port'), () => console.log("Conneted " + app.get('port') + " port"));
 
 app.use('/crawl', crawl);

@@ -1,5 +1,5 @@
 const { from, interval } = require('rxjs');
-
+const fs = require('fs-extra');
 const { map, take, mergeMap, tap } = require('rxjs/operators');
 
 const express = require('express');
@@ -244,7 +244,7 @@ router.get('/ratings/user', (req, res, next) => {
                   const name = $(elem).children('.review_critic').children('.name').children('*').text() || '';
                   const date = moment($(elem).children('.review_critic').children('.date').text(), 'MMM D, YYYY').format('YYYY-MM-DD') || '';
                   const rate = +$(elem).children('.review_grade').children('.user').text() || 0;
-                  return {name: name, date: date, rate: (rate / 2)};
+                  return { name: name, date: date, rate: (rate / 2) };
                 }).toArray();
                 return interval(5).pipe(
                   take(datas.length),
@@ -272,7 +272,8 @@ router.get('/ratings/user', (req, res, next) => {
         );
       })
     )
-    .subscribe(() => {}, (err) => {
+    .subscribe(() => {
+    }, (err) => {
       console.log(err);
       console.log("\007");
 
@@ -316,7 +317,7 @@ router.get('/ratings/critic', (req, res, next) => {
                 date = unFormattedDate;
               }
               const rate = +$(elem).children('.review_grade').children('.game').text() || 0;
-              return {name: name, date: date, rate: Math.round(rate / 10) / 2};
+              return { name: name, date: date, rate: Math.round(rate / 10) / 2 };
             }).toArray();
             return interval(5).pipe(
               take(datas.length),
@@ -339,7 +340,8 @@ router.get('/ratings/critic', (req, res, next) => {
         );
       })
     )
-    .subscribe(() => {}, (err) => {
+    .subscribe(() => {
+    }, (err) => {
       console.log(err);
       console.log("\007");
       console.log("\007");
@@ -347,6 +349,56 @@ router.get('/ratings/critic', (req, res, next) => {
       console.log("\007");
       console.log("\007");
     });
+});
+
+router.get('/games/thumbnail', (req, res, next) => {
+  const base = `https://store.steampowered.com/search/?term=`;
+  const q = `SELECT * FROM game`;
+  from(database.query(q))
+    .pipe(
+      mergeMap(list =>
+        interval(2000).pipe(take(list.length), map(i => list[i]))
+      ),
+      mergeMap(item => {
+        const option = {
+          method: 'GET',
+          uri: base + item.url,
+          headers: { 'USER-Agent': 'Mozilla/5.0' },
+          transform: body => cheerio.load(body)
+        };
+
+        return from(request(option)).pipe(
+          tap(() => console.log(`============================= START TITLE: ${item.title} // ID: ${item.id} ==============================`)),
+          map($ => $, err => console.log(err)),
+          map($ => {
+            const target = $('.col.search_capsule > img').first().attr('src');
+            let url;
+            if (target) {
+              url = target.split('capsule_sm_120.jpg')[0] + `header.jpg`;
+            } else {
+              url = `http://via.placeholder.com/460x215`;
+            }
+            console.log(url);
+            return {
+              method: 'GET',
+              uri: url,
+              headers: { 'USER-Agent': 'Mozilla/5.0' },
+              encoding: 'binary'
+            }
+          }),
+          mergeMap(header => from(request(header))),
+          mergeMap(file => {
+            return from(fs.outputFile(`../assets/${item.url}.jpg`, file, { encoding: 'binary' }));
+          }),
+          map(() => item.url + ' success!')
+        )
+      })
+    ).subscribe(() => {
+  }, (err) => {
+    console.log(err);
+    console.log("\007");
+    console.log("\007");
+  });
 });
 
 module.exports = router;
