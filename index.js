@@ -3,6 +3,7 @@ const mysql = require('./db/database');
 const bodyParser = require('body-parser');
 const crawl = require('./crawler/crawl');
 const algo = require('./algo/algo');
+const database = require('./db/database');
 
 const app = express();
 app.use((req, res, next) => {
@@ -16,8 +17,10 @@ mysql.init();
 
 app.use(bodyParser.json());
 
-app.set('port', 9988);
+app.set('port', 9989);
 app.listen(app.get('port'), () => console.log("Conneted " + app.get('port') + " port"));
 
 app.use('/crawl', crawl);
 app.use('/algo', algo);
+
+process.on('exit', () => database.disconnect());

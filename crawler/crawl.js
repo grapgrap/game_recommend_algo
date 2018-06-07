@@ -357,7 +357,7 @@ router.get('/games/thumbnail', (req, res, next) => {
   from(database.query(q))
     .pipe(
       mergeMap(list =>
-        interval(2000).pipe(take(list.length), map(i => list[i]))
+        interval(500).pipe(take(list.length - 3394), map(i => list[i + 3394]))
       ),
       mergeMap(item => {
         const option = {

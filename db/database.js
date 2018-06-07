@@ -1,7 +1,7 @@
 const { from } = require('rxjs');
 const { map, tap, mergeMap } = require('rxjs/operators');
 const mysql = require('mysql2/promise');
-let pool;
+let conn;
 
 module.exports = {
   init: () => {
@@ -9,10 +9,10 @@ module.exports = {
       host: 'localhost',
       port: '3306',
       user: 'root',
-      // password: 'guswhdrla1!',
-      password: 'grapgrap',
+      password: 'guswhdrla1!',
+      // password: 'grapgrap',
       database: 'sourgrape',
-      connectionLimit: 1000,
+      connectionLimit: 140,
       waitForConnection: false,
       multipleStatements: true
     });

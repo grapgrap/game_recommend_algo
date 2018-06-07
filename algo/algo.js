@@ -3,15 +3,15 @@ const router = express.Router();
 const database = require('../db/database');
 const moment = require('moment');
 const mysql = require('mysql2');
-const { from, of } = require('rxjs');
-const { mergeMap, map, shareReplay, tap, reduce, filter, merge, concat, groupBy, count, toArray, zip, take, distinct } = require('rxjs/operators');
+const { from, of, zip, concat } = require('rxjs');
+const { mergeMap, map, shareReplay, tap, reduce, filter, merge, groupBy, count, toArray, take, distinct } = require('rxjs/operators');
 
 function collaborateFilter(targetUserId, gameId) {
   const CAN_NOT_COMPUTE = -999; // 예상 점수를 계산 할 수 없을 때 출력할 값
 
   const LIMIT_NUMBER_OF_TARGET_USER_GAMES = 100;
   const NUMBER_OF_MATCHED_GAME = 2;
-  const LIMIT_NUMBER_OF_NEIGHBORHOODS = 50;
+  const LIMIT_NUMBER_OF_NEIGHBORHOODS = 30;
   const LIMIT_NUMBER_OF_GAMES = 100;
 
   // 타겟 유저의 게임 평가 리스트
@@ -212,6 +212,139 @@ function sim(targetUserRates, neighborhoodGameRates) {
   );
 }
 
+function betterCBF(targetUserId, gameId) {
+  const CAN_NOT_COMPUTE = -999; // 예상 점수를 계산 할 수 없을 때 출력할 값
+
+  const NUMBER_OF_MATCHED_GAME = 2;
+  const LIMIT_NUMBER_OF_NEIGHBORHOODS = 30;
+  const LIMIT_NUMBER_OF_GAMES = 100;
+
+  const kRates = of(`SELECT * FROM game_rate WHERE user_id = ${targetUserId} AND game_id != ${gameId}`).pipe(
+    mergeMap(query => from(database.query(query))),
+    shareReplay()
+  );
+
+  const Rk = kRates.pipe(
+    map(rates => rates.map(rate => rate.rate)),
+    map(rates => rates.reduce((prev, current) => prev + current, 0) / rates.length),
+  );
+
+  const neighborhoods = of(`
+        SELECT played.user_id as user_id
+        FROM
+          (SELECT user_id FROM game_rate WHERE game_id = ${gameId} AND user_id != ${targetUserId}) as played,
+          (
+            SELECT game_rate.user_id, COUNT(game_rate.game_id) as count
+            FROM 
+              game_rate,
+              (SELECT DISTINCT game_id FROM game_rate WHERE user_id = ${targetUserId}) target
+            WHERE 
+              game_rate.game_id = target.game_id
+            GROUP BY user_id
+            HAVING COUNT(game_rate.game_id) >= ${NUMBER_OF_MATCHED_GAME}
+          ) as candidate
+        WHERE
+        played.user_id = candidate.user_id
+        ORDER BY candidate.count DESC
+        LIMIT ${LIMIT_NUMBER_OF_NEIGHBORHOODS}
+    `)
+    .pipe(
+      mergeMap(query => database.query(query)),
+      mergeMap(list => from(list)),
+      shareReplay()
+    );
+  const collabo = neighborhoods.pipe(
+    map(neighborhood => neighborhood.user_id),
+    mergeMap(neighborhood => {
+      const lRates = from(database.query(`
+        (SELECT * FROM game_rate WHERE user_id = ${neighborhood} AND game_id != ${gameId} LIMIT ${LIMIT_NUMBER_OF_GAMES - 1})
+        UNION (SELECT * FROM game_rate WHERE user_id = ${neighborhood} AND game_id = ${gameId} LIMIT 1)
+      `)).pipe(shareReplay());
+
+      const Rl = lRates.pipe(
+        map(rates => rates.map(rate => rate.rate)),
+        map(rates => rates.reduce((prev, current) => prev + current, 0) / rates.length),
+        shareReplay()
+      );
+      const Rli = lRates.pipe(
+        map(rates => rates.filter(rate => rate.game_id === gameId)),
+        map(rates => rates[0].rate),
+        shareReplay()
+      );
+      const sim = betterSim(kRates, lRates);
+      return zip(Rli, Rl, sim);
+    }),
+    toArray(),
+    shareReplay(),
+    map(results => {
+      const m = results.reduce((prev, current) => prev + (current[0] - current[1]) * current[2], 0);
+      const d = results.reduce((prev, current) => prev + Math.abs(current[2]), 0);
+      return m / d;
+    }),
+    mergeMap(result => Rk.pipe(
+      map(rate => rate + result)
+    ))
+  );
+
+  const kCount = kRates.pipe(count());
+  const lCount = neighborhoods.pipe(count());
+
+  return zip(kCount, lCount).pipe(
+    mergeMap(zip =>
+      zip[0] === 0 || zip[1] === 0
+        ? of(CAN_NOT_COMPUTE)
+        : collabo
+    )
+  );
+}
+
+function betterSim(targetUserRates, neighborhoodGameRates) {
+  const commonGames = concat(
+    targetUserRates.pipe(mergeMap(rates => from(rates))),
+    neighborhoodGameRates.pipe(mergeMap(rates => from(rates)))
+  ).pipe(
+    groupBy(rate => rate.game_id),
+    mergeMap(group => group.pipe(toArray())),
+    filter(group => group.length > 1),
+    map(group => group[0]),
+    shareReplay(),
+  );
+
+  return commonGames.pipe(
+    map(games => games.game_id),
+    mergeMap(game => {
+      const Ri = of(`SELECT game_id, AVG(rate) as rate FROM game_rate WHERE game_id = ${game}`).pipe(
+        mergeMap(query => from(database.query(query))),
+        map(res => res[0]),
+        map(res => res.rate),
+        shareReplay(),
+      );
+
+      const Ki = targetUserRates.pipe(
+        map(rates => rates.filter(rate => rate.game_id === game)),
+        mergeMap(rates => from(rates)),
+        map(rate => rate.rate)
+      );
+
+      const Li = neighborhoodGameRates.pipe(
+        map(rates => rates.filter(rate => rate.game_id === game)),
+        mergeMap(rates => from(rates)),
+        map(rate => rate.rate)
+      );
+
+      return zip(Ri, Ki, Li);
+    }),
+    toArray(),
+    shareReplay(),
+    map(results => {
+      const m = results.reduce((prev, current) => prev + ( (current[1] - current[0]) * (current[2] - current[0]) ), 0);
+      const d1 = results.reduce((prev, current) => prev + ( (current[1] - current[0]) * (current[1] - current[0]) ), 0);
+      const d2 = results.reduce((prev, current) => prev + ( (current[2] - current[0]) * (current[2] - current[0]) ), 0);
+      return m / (Math.sqrt(d1) * Math.sqrt(d2));
+    })
+  );
+}
+
 router.get('/predict-score', (req, res, next) => {
   const user_id = +req.query.user_id;
   const game_id = +req.query.game_id;
@@ -232,22 +365,23 @@ router.get('/predict-score', (req, res, next) => {
     if (rows.length !== 0 && false) {
       res.json({ result: 'success', data: rows[0].predicted_rate });
     } else {
-      let sub = collaborateFilter(user_id, game_id).subscribe(result => {
+      let sub = betterCBF(user_id, game_id).subscribe(result => {
         let q =
           `
-  INSERT INTO predicted_rate (
-  game_id,
-  user_id,
-  predicted_rate,
-  regi_date
-  )
-  VALUES (
-  ${mysql.escape(game_id)},
-  ${mysql.escape(user_id)},
-  ${mysql.escape(result)},
-  ${mysql.escape(now.format('YYYY-MM-DD'))}
-  )`;
-        database.query(q).subscribe(() => {}, err => console.log('occur error in enroll /predict-score || ' + err.toString()));
+            INSERT INTO predicted_rate (
+              game_id,
+              user_id,
+              predicted_rate,
+              regi_date
+            )
+            VALUES (
+              ${mysql.escape(game_id)},
+              ${mysql.escape(user_id)},
+              ${mysql.escape(result)},
+              ${mysql.escape(now.format('YYYY-MM-DD'))}
+             )`;
+        database.query(q).subscribe(() => {
+        }, err => console.log('occur error in enroll /predict-score || ' + err.toString()));
         res.json({ result: 'success', data: result });
       });
 
@@ -260,11 +394,12 @@ router.get('/predict-score', (req, res, next) => {
 });
 
 router.get('/predict-test', (req, res, next) => {
-  const user_id = 354;
+  const user_id = 105123;
   const game_id = +req.query.game_id;
-  collaborateFilter(user_id, game_id).subscribe(result => {
-    res.json({ result: 'success', data: result });
-  })
+  betterCBF(user_id, game_id).subscribe(predict => res.json({
+    result: 'success',
+    predict: predict
+  }));
 });
 
 function naiveBayesion(ratedTags) {
