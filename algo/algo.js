@@ -220,7 +220,7 @@ function betterCBF(targetUserId, gameId) {
   const LIMIT_NUMBER_OF_GAMES = 100;
   const LIMIT_DATE = moment().subtract(3, 'm').format('YYYY-MM-DD');
 
-  const kRates = of(`SELECT * FROM game_rate WHERE user_id = ${targetUserId} AND game_id != ${gameId}`).pipe(
+  const kRates = of(`SELECT * FROM game_rate WHERE user_id = ${targetUserId} AND game_id != ${gameId} LIMIT ${LIMIT_NUMBER_OF_GAMES}`).pipe(
     mergeMap(query => from(database.query(query))),
     shareReplay()
   );
@@ -238,7 +238,7 @@ function betterCBF(targetUserId, gameId) {
             SELECT game_rate.user_id, COUNT(game_rate.game_id) as count
             FROM 
               (SELECT * FROM game_rate WHERE regi_date > ${LIMIT_DATE}) as game_rate,
-              (SELECT DISTINCT game_id FROM game_rate WHERE user_id = ${targetUserId}) target
+              (SELECT DISTINCT game_id FROM game_rate WHERE user_id = ${targetUserId} LIMIT ${LIMIT_NUMBER_OF_GAMES}) target
             WHERE 
               game_rate.game_id = target.game_id
             GROUP BY user_id
