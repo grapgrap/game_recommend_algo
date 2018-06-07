@@ -216,8 +216,9 @@ function betterCBF(targetUserId, gameId) {
   const CAN_NOT_COMPUTE = -999; // 예상 점수를 계산 할 수 없을 때 출력할 값
 
   const NUMBER_OF_MATCHED_GAME = 2;
-  const LIMIT_NUMBER_OF_NEIGHBORHOODS = 30;
+  const LIMIT_NUMBER_OF_NEIGHBORHOODS = 1;
   const LIMIT_NUMBER_OF_GAMES = 100;
+  const LIMIT_DATE = moment().subtract(3, 'm').format('YYYY-MM-DD');
 
   const kRates = of(`SELECT * FROM game_rate WHERE user_id = ${targetUserId} AND game_id != ${gameId}`).pipe(
     mergeMap(query => from(database.query(query))),
@@ -236,7 +237,7 @@ function betterCBF(targetUserId, gameId) {
           (
             SELECT game_rate.user_id, COUNT(game_rate.game_id) as count
             FROM 
-              game_rate,
+              (SELECT * FROM game_rate WHERE regi_date > ${LIMIT_DATE}) as game_rate,
               (SELECT DISTINCT game_id FROM game_rate WHERE user_id = ${targetUserId}) target
             WHERE 
               game_rate.game_id = target.game_id
@@ -257,7 +258,7 @@ function betterCBF(targetUserId, gameId) {
     map(neighborhood => neighborhood.user_id),
     mergeMap(neighborhood => {
       const lRates = from(database.query(`
-        (SELECT * FROM game_rate WHERE user_id = ${neighborhood} AND game_id != ${gameId} LIMIT ${LIMIT_NUMBER_OF_GAMES - 1})
+        (SELECT * FROM game_rate WHERE user_id = ${neighborhood} AND game_id != ${gameId} AND regi_date > ${LIMIT_DATE})
         UNION (SELECT * FROM game_rate WHERE user_id = ${neighborhood} AND game_id = ${gameId} LIMIT 1)
       `)).pipe(shareReplay());
 
@@ -375,13 +376,16 @@ router.get('/predict-score', (req, res, next) => {
               regi_date
             )
             VALUES (
-              ${mysql.escape(game_id)},
-              ${mysql.escape(user_id)},
-              ${mysql.escape(result)},
-              ${mysql.escape(now.format('YYYY-MM-DD'))}
-             )`;
-        database.query(q).subscribe(() => {
-        }, err => console.log('occur error in enroll /predict-score || ' + err.toString()));
+            ${mysql.escape(game_id)},
+            ${mysql.escape(user_id)},
+            ${mysql.escape(result)},
+            ${mysql.escape(now.format('YYYY-MM-DD'))}
+          )`;
+        database.query(q).subscribe(
+          () => {
+          },
+          err => console.log('occur error in enroll /predict-score || ' + err.toString())
+        );
         res.json({ result: 'success', data: result });
       });
 
@@ -394,7 +398,7 @@ router.get('/predict-score', (req, res, next) => {
 });
 
 router.get('/predict-test', (req, res, next) => {
-  const user_id = 105123;
+  const user_id = 105140;
   const game_id = +req.query.game_id;
   betterCBF(user_id, game_id).subscribe(predict => res.json({
     result: 'success',
