@@ -434,7 +434,6 @@ function naiveBayesion(ratedTags) {
     toArray(),
     map(results => results.sort((prev, next) => next.prediction - prev.prediction)),
     mergeMap(results => from(results)),
-    filter(result => result.prediction > 3),
     take(10),
     toArray(),
     shareReplay()
@@ -460,7 +459,7 @@ router.get('/recommand', (req, res, next) => {
   const result = ratedTags.pipe(
     count(),
     mergeMap(length => length <= 0 ? of([]) : naiveBayesion(ratedTags)),
-    mergeMap(list => list.length <= 0 ? of(null)
+    mergeMap(list => list.length <= 0 ? of([])
       : from(list).pipe(
         map(tag => tag.id),
         reduce((prev, next, index) => index === 0 ? prev +
