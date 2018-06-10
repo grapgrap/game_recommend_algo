@@ -9,10 +9,10 @@ module.exports = {
       host: 'localhost',
       port: '3306',
       user: 'root',
-      password: 'guswhdrla1!',
-      // password: 'grapgrap',
+      // password: 'guswhdrla1!',
+      password: 'grapgrap',
       database: 'sourgrape',
-      connectionLimit: 140,
+      connectionLimit: 490,
       waitForConnection: false,
       multipleStatements: true
     });

@@ -415,15 +415,14 @@ function naiveBayesion(ratedTags) {
         mergeMap(rate => {
           const filteredTargetRateTagCountByRate = targetRatedTags.pipe(filter(ratedTag => ratedTag.rate === rate), count(), shareReplay());
           const targetRatedTagCount = targetRatedTags.pipe(count());
-          return filteredTargetRateTagCountByRate.pipe(zip(targetRatedTagCount), map(zip => zip[0] / zip[1]));
+          return zip(filteredTargetRateTagCountByRate, targetRatedTagCount).pipe(map(zip => zip[0] / zip[1]));
         }),
         toArray()
       )
     }),
   );
 
-  return tags.pipe(
-    zip(resultByRates),
+  return zip(tags, resultByRates).pipe(
     map(zip => {
       const tag = zip[0];
       const result = zip[1];
