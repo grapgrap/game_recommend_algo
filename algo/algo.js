@@ -283,7 +283,7 @@ function betterCBF(targetUserId, gameId) {
       return m / d;
     }),
     mergeMap(result => Rk.pipe(
-      map(rate => rate + result)
+      map(rate => rate + result > 5 ? 5 : rate + result )
     ))
   );
 
