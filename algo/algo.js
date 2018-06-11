@@ -246,11 +246,10 @@ function betterCBF(targetUserId, gameId) {
           ) as candidate
         WHERE
         played.user_id = candidate.user_id
-        ORDER BY candidate.count, candidate.user_id DESC
+        ORDER BY candidate.count DESC
         LIMIT ${LIMIT_NUMBER_OF_NEIGHBORHOODS}
     `)
     .pipe(
-      tap(console.log),
       mergeMap(query => database.query(query)),
       mergeMap(list => from(list)),
       shareReplay()
