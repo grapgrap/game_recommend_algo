@@ -250,6 +250,7 @@ function betterCBF(targetUserId, gameId) {
         LIMIT ${LIMIT_NUMBER_OF_NEIGHBORHOODS}
     `)
     .pipe(
+      tap(console.log),
       mergeMap(query => database.query(query)),
       mergeMap(list => from(list)),
       shareReplay()
