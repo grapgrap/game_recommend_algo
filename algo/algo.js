@@ -216,7 +216,7 @@ function betterCBF(targetUserId, gameId) {
   const CAN_NOT_COMPUTE = -999; // 예상 점수를 계산 할 수 없을 때 출력할 값
 
   const NUMBER_OF_MATCHED_GAME = 2;
-  const LIMIT_NUMBER_OF_NEIGHBORHOODS = 30;
+  const LIMIT_NUMBER_OF_NEIGHBORHOODS = 10;
   const LIMIT_NUMBER_OF_GAMES = 100;
   const LIMIT_DATE = moment().subtract(3, 'm').format('YYYY-MM-DD');
 
