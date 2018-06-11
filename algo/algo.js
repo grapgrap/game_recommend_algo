@@ -246,7 +246,7 @@ function betterCBF(targetUserId, gameId) {
           ) as candidate
         WHERE
         played.user_id = candidate.user_id
-        ORDER BY candidate.count DESC
+        ORDER BY candidate.count DESC, candidate.user_id DESC
         LIMIT ${LIMIT_NUMBER_OF_NEIGHBORHOODS}
     `)
     .pipe(
