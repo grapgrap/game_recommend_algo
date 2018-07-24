@@ -212,12 +212,12 @@ function sim(targetUserRates, neighborhoodGameRates) {
   );
 }
 
-function betterCBF(targetUserId, gameId) {
+function betterCBF(targetUserId, gameId, x, y) {
   const CAN_NOT_COMPUTE = -999; // 예상 점수를 계산 할 수 없을 때 출력할 값
 
   const NUMBER_OF_MATCHED_GAME = 2;
-  const LIMIT_NUMBER_OF_NEIGHBORHOODS = 70;
-  const LIMIT_NUMBER_OF_GAMES = 100;
+  const LIMIT_NUMBER_OF_NEIGHBORHOODS = x;
+  const LIMIT_NUMBER_OF_GAMES = y;
   const LIMIT_DATE = moment().subtract(3, 'm').format('YYYY-MM-DD');
 
   const kRates = of(`SELECT * FROM game_rate WHERE user_id = ${targetUserId} AND game_id != ${gameId} LIMIT ${LIMIT_NUMBER_OF_GAMES}`).pipe(
@@ -366,7 +366,7 @@ router.get('/predict-score', (req, res, next) => {
     if (rows.length !== 0 && false) {
       res.json({ result: 'success', data: rows[0].predicted_rate });
     } else {
-      let sub = betterCBF(user_id, game_id).subscribe(result => {
+      let sub = betterCBF(user_id, game_id, 100, 100).subscribe(result => {
         let q =
           `
             INSERT INTO predicted_rate (
@@ -400,7 +400,9 @@ router.get('/predict-score', (req, res, next) => {
 router.get('/predict-test', (req, res, next) => {
   const user_id = 105123;
   const game_id = +req.query.game_id;
-  betterCBF(user_id, game_id).subscribe(predict => res.json({
+  const x = req.query.x;
+  const y = 100;
+  betterCBF(user_id, game_id, x, y).subscribe(predict => res.json({
     result: 'success',
     predict: predict
   }));
