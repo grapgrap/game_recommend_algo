@@ -216,7 +216,7 @@ function betterCBF(targetUserId, gameId) {
   const CAN_NOT_COMPUTE = -999; // 예상 점수를 계산 할 수 없을 때 출력할 값
 
   const NUMBER_OF_MATCHED_GAME = 2;
-  const LIMIT_NUMBER_OF_NEIGHBORHOODS = 100;
+  const LIMIT_NUMBER_OF_NEIGHBORHOODS = 70;
   const LIMIT_NUMBER_OF_GAMES = 100;
   const LIMIT_DATE = moment().subtract(3, 'm').format('YYYY-MM-DD');
 
@@ -363,7 +363,7 @@ router.get('/predict-score', (req, res, next) => {
   ;
   database.query(q).subscribe(rows => {
     // 예상 평점을 계산한지 3일이 지나지 않았고, 그 값이 유효한 값이면 캐시된 데이터 전송
-    if (rows.length !== 0) {
+    if (rows.length !== 0 && false) {
       res.json({ result: 'success', data: rows[0].predicted_rate });
     } else {
       let sub = betterCBF(user_id, game_id).subscribe(result => {
