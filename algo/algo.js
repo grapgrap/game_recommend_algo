@@ -218,7 +218,7 @@ function betterCBF(targetUserId, gameId, x, y) {
   const NUMBER_OF_MATCHED_GAME = 2;
   const LIMIT_NUMBER_OF_NEIGHBORHOODS = x;
   const LIMIT_NUMBER_OF_GAMES = y;
-  const LIMIT_DATE = moment().subtract(3, 'm').format('YYYY-MM-DD');
+  const LIMIT_DATE = moment().subtract(6, 'm').format('YYYY-MM-DD');
 
   const kRates = of(`SELECT * FROM game_rate WHERE user_id = ${targetUserId} AND game_id != ${gameId} LIMIT ${LIMIT_NUMBER_OF_GAMES}`).pipe(
     mergeMap(query => from(database.query(query))),
@@ -398,12 +398,10 @@ router.get('/predict-score', (req, res, next) => {
 });
 
 router.get('/predict-test', (req, res, next) => {
-  const user_id = 105123;
+  const user_id = +req.query.user_id;
   const game_id = +req.query.game_id;
   const x = +req.query.x;
-  const y = 100;
-  console.log(x);
-  betterCBF(user_id, game_id, x, y).subscribe(predict => res.json({
+  betterCBF(user_id, game_id, x, 100).subscribe(predict => res.json({
     result: 'success',
     predict: predict
   }));
