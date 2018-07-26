@@ -237,7 +237,7 @@ function betterCBF(targetUserId, gameId, x, y) {
           (
             SELECT game_rate.user_id, COUNT(game_rate.game_id) as count
             FROM 
-              (SELECT * FROM game_rate WHERE regi_date > ${LIMIT_DATE}) as game_rate,
+              (SELECT * FROM game_rate) as game_rate,
               (SELECT DISTINCT game_id FROM game_rate WHERE user_id = ${targetUserId} LIMIT ${LIMIT_NUMBER_OF_GAMES}) target
             WHERE 
               game_rate.game_id = target.game_id
@@ -258,7 +258,7 @@ function betterCBF(targetUserId, gameId, x, y) {
     map(neighborhood => neighborhood.user_id),
     mergeMap(neighborhood => {
       const lRates = from(database.query(`
-        (SELECT * FROM game_rate WHERE user_id = ${neighborhood} AND game_id != ${gameId} AND regi_date > ${LIMIT_DATE})
+        (SELECT * FROM game_rate WHERE user_id = ${neighborhood} AND game_id != ${gameId})
         UNION (SELECT * FROM game_rate WHERE user_id = ${neighborhood} AND game_id = ${gameId} LIMIT 1)
       `)).pipe(shareReplay());
 
