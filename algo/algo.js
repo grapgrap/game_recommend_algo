@@ -218,7 +218,7 @@ function betterCBF(targetUserId, gameId, x, y) {
   const NUMBER_OF_MATCHED_GAME = 2;
   const LIMIT_NUMBER_OF_NEIGHBORHOODS = x;
   const LIMIT_NUMBER_OF_GAMES = y;
-  const LIMIT_DATE = moment().subtract(12, 'm').format('YYYY-MM-DD');
+  const LIMIT_DATE = moment().subtract(9, 'm').format('YYYY-MM-DD');
 
   const kRates = of(`SELECT * FROM game_rate WHERE user_id = ${targetUserId} AND game_id != ${gameId} LIMIT ${LIMIT_NUMBER_OF_GAMES}`).pipe(
     mergeMap(query => from(database.query(query))),
