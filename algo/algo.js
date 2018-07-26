@@ -402,7 +402,8 @@ router.get('/predict-test', (req, res, next) => {
   const user_id = +req.query.user_id;
   const game_id = +req.query.game_id;
   const x = +req.query.x;
-  betterCBF(user_id, game_id, x, 100).subscribe(predict => res.json({
+  const y = +req.qeury.y;
+  betterCBF(user_id, game_id, x, y).subscribe(predict => res.json({
     result: 'success',
     predict: predict
   }));
