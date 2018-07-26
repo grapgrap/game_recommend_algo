@@ -250,7 +250,6 @@ function betterCBF(targetUserId, gameId, x, y) {
         LIMIT ${LIMIT_NUMBER_OF_NEIGHBORHOODS}
     `)
     .pipe(
-      tap(console.log),
       mergeMap(query => database.query(query)),
       mergeMap(list => from(list)),
       shareReplay()
@@ -259,7 +258,7 @@ function betterCBF(targetUserId, gameId, x, y) {
     map(neighborhood => neighborhood.user_id),
     mergeMap(neighborhood => {
       const lRates = from(database.query(`
-        (SELECT * FROM game_rate WHERE user_id = ${neighborhood} AND game_id != ${gameId} AND regi_date > ${LIMIT_DATE})
+        (SELECT * FROM game_rate WHERE user_id = ${neighborhood} AND game_id != ${gameId})
         UNION (SELECT * FROM game_rate WHERE user_id = ${neighborhood} AND game_id = ${gameId} LIMIT 1)
       `)).pipe(shareReplay());
 
@@ -402,7 +401,7 @@ router.get('/predict-test', (req, res, next) => {
   const user_id = +req.query.user_id;
   const game_id = +req.query.game_id;
   const x = +req.query.x;
-  const y = +req.qeury.y;
+  const y = +req.query.y;
   betterCBF(user_id, game_id, x, y).subscribe(predict => res.json({
     result: 'success',
     predict: predict
