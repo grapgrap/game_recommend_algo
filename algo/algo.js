@@ -237,7 +237,7 @@ function betterCBF(targetUserId, gameId, x, y) {
           (
             SELECT game_rate.user_id, COUNT(game_rate.game_id) as count
             FROM 
-              
+              (SELECT * FROM game_rate) as game_rate,
               (SELECT DISTINCT game_id FROM game_rate WHERE user_id = ${targetUserId} LIMIT ${LIMIT_NUMBER_OF_GAMES}) target
             WHERE 
               game_rate.game_id = target.game_id
