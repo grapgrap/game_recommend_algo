@@ -473,11 +473,11 @@ router.get('/recommand', (req, res, next) => {
         ),
         map(subQuery =>
           `
-  SELECT game.id as id, game.title, game.url, filtered_game.rate FROM
+  SELECT game.id as id, game.title, game.url, rate FROM
   (
-    SELECT DISTINCT game_rate.game_id as game_id FROM
+    SELECT DISTINCT game_rate.game_id as game_id, rate FROM
     (
-      SELECT game_rate.game_id FROM game_rate
+      SELECT game_rate.game_id, rate FROM game_rate
       WHERE user_id != ${user_id} GROUP BY game_id HAVING COUNT(rate) > 50 AND AVG(rate) > 3
     ) as game_rate
     INNER JOIN
@@ -489,6 +489,7 @@ router.get('/recommand', (req, res, next) => {
   ORDER BY game.release_date DESC
   `
         ),
+        tap(console.log),
         mergeMap(query => from(database.query(query))),
       )
     )
