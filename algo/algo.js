@@ -283,7 +283,7 @@ function betterCBF(targetUserId, gameId, x, y) {
       return m / d;
     }),
     mergeMap(result => Rk.pipe(
-      map(rate => rate + result > 5 ? 5 : rate + result )
+      map(rate => rate + result > 5 ? 5 : rate + result)
     ))
   );
 
@@ -338,9 +338,9 @@ function betterSim(targetUserRates, neighborhoodGameRates) {
     toArray(),
     shareReplay(),
     map(results => {
-      const m = results.reduce((prev, current) => prev + ( (current[1] - current[0]) * (current[2] - current[0]) ), 0);
-      const d1 = results.reduce((prev, current) => prev + ( (current[1] - current[0]) * (current[1] - current[0]) ), 0);
-      const d2 = results.reduce((prev, current) => prev + ( (current[2] - current[0]) * (current[2] - current[0]) ), 0);
+      const m = results.reduce((prev, current) => prev + ((current[1] - current[0]) * (current[2] - current[0])), 0);
+      const d1 = results.reduce((prev, current) => prev + ((current[1] - current[0]) * (current[1] - current[0])), 0);
+      const d2 = results.reduce((prev, current) => prev + ((current[2] - current[0]) * (current[2] - current[0])), 0);
       return m / (Math.sqrt(d1) * Math.sqrt(d2));
     })
   );
@@ -497,59 +497,79 @@ router.get('/recommand', (req, res, next) => {
   result.subscribe(data => res.json({ recommend: data }));
 });
 
+function naiveBayesionTest(ratedTags) {
+  const tags = ratedTags.pipe(distinct(tag => tag.tag_id), shareReplay());
+  const resultByRates = tags.pipe(
+    mergeMap(tag => {
+      const targetRatedTags = ratedTags.pipe(filter(ratedTag => ratedTag.tag_id === tag.tag_id), shareReplay());
+      return from([1, 2, 3, 4, 5]).pipe(
+        mergeMap(rate => {
+          const filteredTargetRateTagCountByRate = targetRatedTags.pipe(filter(ratedTag => ratedTag.rate === rate), count(), shareReplay());
+          const targetRatedTagCount = targetRatedTags.pipe(count());
+          return zip(filteredTargetRateTagCountByRate, targetRatedTagCount).pipe(map(zip => zip[0] / zip[1]));
+        }),
+        toArray()
+      )
+    }),
+  );
+
+  return zip(tags, resultByRates).pipe(
+    map(zip => {
+      const tag = zip[0];
+      const result = zip[1];
+      return {
+        id: tag.tag_id,
+        prediction: 1 * result[0] + 2 * result[1] + 3 * result[2] + 4 * result[3] + 5 * result[4]
+      };
+    }),
+    toArray(),
+    map(results => results.sort((prev, next) => next.prediction - prev.prediction)),
+    mergeMap(results => from(results)),
+    toArray(),
+    shareReplay()
+  );
+}
+
 router.get('/recommand-test', (req, res, next) => {
   const user_id = req.query.user_id;
 
-  const ratedTags = from(database.query(
-    `
-  SELECT game_rate.rate, game_tag.tag_id
-  FROM game_rate, game_tag
-  WHERE
-  user_id = ${user_id}
-  AND game_rate.game_id = game_tag.game_id
-  `
-  )).pipe(
+  const ratedTags = from(database.query(`
+    SELECT game_rate.rate, game_tag.tag_id, game_rate.game_id
+    FROM game_rate, game_tag
+    WHERE
+      user_id = ${user_id} AND 
+      game_rate.game_id = game_tag.game_id
+  `)
+  ).pipe(
     mergeMap(list => from(list)),
-    shareReplay()
+    shareReplay(),
+  );
+
+  const naive = ratedTags.pipe(
+    count(),
+    mergeMap(length => length <= 0 ? of([]) : naiveBayesionTest(ratedTags))
   );
 
   const result = ratedTags.pipe(
-    count(),
-    mergeMap(length => length <= 0 ? of([]) : naiveBayesion(ratedTags)),
-    mergeMap(list => list.length <= 0 ? of([])
-      : from(list).pipe(
-        map(tag => tag.id),
-        reduce((prev, next, index) => index === 0 ? prev +
-          `tag_id = ${mysql.escape(next)}`
-          : prev +
-          ` OR tag_id = ${mysql.escape(next)}`
-          ,
-          `SELECT game_tag.game_id, game_tag.tag_id FROM game_tag WHERE `
-        ),
-        map(subQuery =>
-          `
-  SELECT game.id as id, game.title, game.url FROM
-  (
-    SELECT DISTINCT game_rate.game_id as game_id FROM
-    (
-      SELECT game_rate.game_id FROM game_rate
-      WHERE user_id != ${user_id} GROUP BY game_id HAVING COUNT(rate) > 50 AND AVG(rate) > 3
-    ) as game_rate
-    INNER JOIN
-    (${subQuery}) as game_tag
-    ON game_rate.game_id = game_tag.game_id
-  ) as filtered_game,
-  game
-  WHERE game.id = filtered_game.game_id
-  ORDER BY game.release_date DESC
-  `
-        ),
-        mergeMap(query => from(database.query(query))),
-      )
-    )
+    mergeMap(item => naive.pipe(
+      map(tags => {
+        const rate = tags.filter(tag => tag.id === item.tag_id);
+        return rate.length > 0 ?{ ...item, real: item.rate, rate: rate[0].prediction } : null;
+      })
+    )),
+    filter(item => item),
+    groupBy(item => item.game_id),
+    mergeMap(group$ => group$.pipe(toArray())),
+    map(group => {
+      const length = group.length;
+      const total = group.map(item => item.rate).reduce((prev, curr) => prev + curr, 0);
+      const real_tot = group.map(item => item.real).reduce((prev, curr) => prev + curr, 0);
+      return { game_id: group[0].game_id, rate: total / length, real: real_tot / length};
+    }),
+    toArray(),
   );
 
-  result.subscribe(data => res.json({ recommend: data.map(i => i.id) }));
+  result.subscribe(data => res.json({ recommend: data }));
 });
 
 module.exports = router;
