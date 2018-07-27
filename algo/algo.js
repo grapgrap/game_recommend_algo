@@ -473,11 +473,11 @@ router.get('/recommand', (req, res, next) => {
         ),
         map(subQuery =>
           `
-  SELECT game.id as id, game.title, game.url, rate FROM
+  SELECT game.id as id, game.title, game.url FROM
   (
-    SELECT DISTINCT game_rate.game_id as game_id, rate FROM
+    SELECT DISTINCT game_rate.game_id as game_id FROM
     (
-      SELECT game_rate.game_id, rate FROM game_rate
+      SELECT game_rate.game_id FROM game_rate
       WHERE user_id != ${user_id} GROUP BY game_id HAVING COUNT(rate) > 50 AND AVG(rate) > 3
     ) as game_rate
     INNER JOIN
@@ -489,13 +489,67 @@ router.get('/recommand', (req, res, next) => {
   ORDER BY game.release_date DESC
   `
         ),
-        tap(console.log),
         mergeMap(query => from(database.query(query))),
       )
     )
   );
 
   result.subscribe(data => res.json({ recommend: data }));
+});
+
+router.get('/recommand-test', (req, res, next) => {
+  const user_id = req.query.user_id;
+
+  const ratedTags = from(database.query(
+    `
+  SELECT game_rate.rate, game_tag.tag_id
+  FROM game_rate, game_tag
+  WHERE
+  user_id = ${user_id}
+  AND game_rate.game_id = game_tag.game_id
+  `
+  )).pipe(
+    mergeMap(list => from(list)),
+    shareReplay()
+  );
+
+  const result = ratedTags.pipe(
+    count(),
+    mergeMap(length => length <= 0 ? of([]) : naiveBayesion(ratedTags)),
+    mergeMap(list => list.length <= 0 ? of([])
+      : from(list).pipe(
+        map(tag => tag.id),
+        reduce((prev, next, index) => index === 0 ? prev +
+          `tag_id = ${mysql.escape(next)}`
+          : prev +
+          ` OR tag_id = ${mysql.escape(next)}`
+          ,
+          `SELECT game_tag.game_id, game_tag.tag_id FROM game_tag WHERE `
+        ),
+        map(subQuery =>
+          `
+  SELECT game.id as id, game.title, game.url FROM
+  (
+    SELECT DISTINCT game_rate.game_id as game_id FROM
+    (
+      SELECT game_rate.game_id FROM game_rate
+      WHERE user_id != ${user_id} GROUP BY game_id HAVING COUNT(rate) > 50 AND AVG(rate) > 3
+    ) as game_rate
+    INNER JOIN
+    (${subQuery}) as game_tag
+    ON game_rate.game_id = game_tag.game_id
+  ) as filtered_game,
+  game
+  WHERE game.id = filtered_game.game_id
+  ORDER BY game.release_date DESC
+  `
+        ),
+        mergeMap(query => from(database.query(query))),
+      )
+    )
+  );
+
+  result.subscribe(data => res.json({ recommend: data.id }));
 });
 
 module.exports = router;
