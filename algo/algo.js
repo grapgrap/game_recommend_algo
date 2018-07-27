@@ -549,7 +549,7 @@ router.get('/recommand-test', (req, res, next) => {
     )
   );
 
-  result.subscribe(data => res.json({ recommend: data.id }));
+  result.subscribe(data => res.json({ recommend: data.map(i => i.id) }));
 });
 
 module.exports = router;
