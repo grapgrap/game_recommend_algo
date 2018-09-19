@@ -442,7 +442,7 @@ function naiveBayesion(ratedTags) {
   );
 }
 
-router.get('/recommand', (req, res, next) => {
+router.get('/old-recommand', (req, res, next) => {
   const user_id = req.query.user_id;
 
   const ratedTags = from(database.query(
@@ -605,7 +605,7 @@ router.get('/naive', (req, res, next) => {
   result.subscribe(data => res.json({ recommend: data }));
 });
 
-router.get('/new-naive', (req, res, next) => {
+router.get('/recommand', (req, res, next) => {
   const user_id = req.query.user_id;
   const limit = req.query.limit | 10;
   const ratedTag = from(database.query(`
@@ -645,10 +645,15 @@ router.get('/new-naive', (req, res, next) => {
   targetGames.pipe(
     mergeMap(targetGame => newNaiveBayesian(targetGame.game_id, user_id)),
     filter(result => result.like),
-    toArray()
-  ).subscribe((result) => {
-    console.log(result)
-  })
+    map(result => result.game_id),
+    distinct(),
+    reduce((prev, next, index) => index === 0
+      ? prev + `id = ${mysql.escape(next)}`
+      : prev + ` OR id = ${mysql.escape(next)}`,
+      ''
+    ),
+    mergeMap(subQuery => from(database.query(`SELECT id, title, url FROM game WHERE ${subQuery}`)))
+  ).subscribe(data => res.json({ recommend: data }));
 });
 
 router.get('/new-naive-test', (req, res, next) => {
